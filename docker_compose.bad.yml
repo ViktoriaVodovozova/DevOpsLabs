@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./services/frontend:/etc/nginx/conf.d
+      - /etc/passwd:/etc/passwd:ro  #  монтирование чувствительных файлов хоста
+    privileged: true  #  избыточные привилегии
+    environment:
+      - DB_PASSWORD=supersecret123  #  хардкод секретов
+
+  backend:
+    image: python:latest  #  использование latest
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://user:supersecret123@db:5432/app
+      - DB_PASSWORD=supersecret123  #  дублирование и хардкод
+    depends_on:
+      - db  #  без healthcheck сервис может стартовать раньше, чем БД готова
+
+  db:
+    image: postgres:latest  #  latest и нет версии
+    ports:
+      - "5432:5432"  #  ненужное экспонирование БД наружу
+    environment:
+      - POSTGRES_PASSWORD=supersecret123  #  хардкод
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:

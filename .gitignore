@@ -1,0 +1,19 @@
+.env
+.env.local
+*.secret
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Docker
+docker-compose.override.yml
+*.db
+*.sqlite3
+
+# Логи и временные файлы
+*.log
+tmp/
+.DS_Store

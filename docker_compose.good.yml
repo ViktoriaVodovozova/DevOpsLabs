@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: nginx:1.25-alpine  #  конкретная версия + alpine для уменьшения размера
+    ports:
+      - "80:80"
+    volumes:
+      - ./services/frontend/nginx.conf:/etc/nginx/nginx.conf:ro  # ← только конфиг, read-only
+    environment:
+      - DB_PASSWORD=${DB_PASSWORD}  #  переменная из .env
+    depends_on:
+      backend:
+        condition: service_healthy  #  ожидание готовности бэкенда
+    networks:
+      - public_net
+    restart: unless-stopped  #  политика перезапуска
+    deploy:
+      resources:
+        limits:
+          memory: 256M  #  ограничение ресурсов
+          cpus: '0.5'
+
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    expose:
+      - "5000"  #  только внутренняя доступность
+    environment:
+      - DATABASE_URL=postgresql://user:${DB_PASSWORD}@db:5432/app
+      - DB_PASSWORD=${DB_PASSWORD}
+    env_file:
+      - .env  #  вынос секретов в отдельный файл
+    depends_on:
+      db:
+        condition: service_healthy  #  healthcheck для БД
+    networks:
+      - backend_net
+    healthcheck:  #  проверка готовности сервиса
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+
+  db:
+    image: postgres:15.3-alpine  #  конкретная версия + alpine
+    expose:
+      - "5432"  #  доступно только внутри сети, не на хосте
+    environment:
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_USER=user
+      - POSTGRES_DB=app
+    env_file:
+      - .env
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./services/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - db_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+
+volumes:
+  db_data:
+    name: app_db_data  #  именованный том для удобства управления
+
+networks:
+  public_net:
+    driver: bridge
+  backend_net:
+    driver: bridge
+  db_net:
+    driver: bridge
+    internal: true  #  полная изоляция: нет доступа к интернету и другим сетям
